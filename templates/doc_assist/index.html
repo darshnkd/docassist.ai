@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doc Assist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #ffffff; --panel: #f7f7f8; --text: #111827; --muted: #6b7280; --accent: #10a37f; --border: #e5e7eb; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .layout { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
+    .sidebar { border-right: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; }
+    .sidebar .title { padding: 16px; font-weight: 600; border-bottom: 1px solid var(--border); }
+    .history { flex: 1; overflow-y: auto; }
+    .history .item { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted); cursor: pointer; }
+    .history .item:hover { background: #eef2f7; color: var(--text); }
+    .new-chat { padding: 12px 16px; border-top: 1px solid var(--border); }
+    .btn { width: 100%; padding: 10px 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .btn:disabled { opacity: .7; cursor: not-allowed; }
+    .main { display: grid; grid-template-rows: 1fr auto; height: 100%; }
+    .chat { padding: 24px; overflow-y: auto; }
+    .bubble { max-width: 720px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; margin: 8px 0; line-height: 1.5; background: #ffffff; }
+    .bubble.user { background: #e8f5ff; margin-left: auto; }
+    .bubble.assistant { background: #ffffff; }
+    .composer { border-top: 1px solid var(--border); background: var(--panel); padding: 12px; }
+    .input-container { display: flex; background: #ffffff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; align-items: center; gap: 8px; }
+    .input-container input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); padding: 8px 0; }
+    .icon-btn { background: none; border: 1px solid var(--border); cursor: pointer; padding: 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all 0.2s; }
+    .icon-btn:hover { background: #f3f4f6; color: var(--text); }
+    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .file-input { display: none; }
+    .send-btn { color: #fff; background: var(--accent); border: none; }
+    .send-btn:hover { filter: brightness(0.95); }
+    .send-btn:disabled { background: #cbd5e1; color: #fff; }
+    .file-previews { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .file-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 6px 8px; font-size: 12px; color: var(--muted); }
+    .end-session { background: #ef4444; color: #fff; border: none; border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+  </style>
+  <script>
+    async function uploadFiles() {
+      const files = document.getElementById('files').files;
+      if (!files || files.length === 0) { return; }
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.ok) { appendBubble('assistant', 'Upload error: ' + (data.error || 'failed')); return; }
+      renderFilePreviews(files);
+    }
+
+    function triggerFileUpload() {
+      document.getElementById('files').click();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('message');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      appendBubble('user', text);
+      setSending(true);
+      try {
+        const res = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Request failed');
+        appendBubble('assistant', data.answer);
+      } catch (e) {
+        appendBubble('assistant', 'Error: ' + e.message);
+      } finally {
+        setSending(false);
+      }
+    }
+
+    function appendBubble(role, text) {
+      const chat = document.getElementById('chat');
+      const div = document.createElement('div');
+      div.className = 'bubble ' + role;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function setSending(s) {
+      document.getElementById('send').disabled = s;
+    }
+
+    function renderFilePreviews(fileList) {
+      const holder = document.getElementById('file-previews');
+      holder.innerHTML = '';
+      for (const f of fileList) {
+        const chip = document.createElement('div');
+        chip.className = 'file-chip';
+        chip.textContent = f.name;
+        holder.appendChild(chip);
+      }
+    }
+
+    async function endSession() {
+      const res = await fetch('/end_session', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) { location.reload(); }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('files').addEventListener('change', uploadFiles);
+    });
+  </script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="title">Doc Assist</div>
+      <div class="history">
+        {% if history_list %}
+          {% for conv in history_list %}
+          <div class="item">{{ conv.title }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="item">No past conversations</div>
+        {% endif %}
+      </div>
+      <div class="new-chat">
+        <button class="btn" onclick="fetch('/new_chat', {method:'POST'}).then(()=>location.reload())">New Chat</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div id="chat" class="chat">
+        <div id="file-previews" class="file-previews"></div>
+      </div>
+      <div class="composer">
+        <div class="input-container">
+          <input type="file" id="files" class="file-input" multiple accept=".pdf,.docx,.txt,.soap,.csv" />
+          <button class="icon-btn" onclick="triggerFileUpload()" title="Upload files">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <input id="message" type="text" placeholder="Send a message..." onkeydown="if(event.key==='Enter'){sendMessage()}" />
+          <button id="send" class="icon-btn send-btn" onclick="sendMessage()" title="Send message">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z"/>
+            </svg>
+          </button>
+          
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
