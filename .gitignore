@@ -1,12 +1,22 @@
+# OS
 .DS_Store
+
+# Python
 __pycache__/
-*.py[cod]
-.venv/
+*.pyc
+
+# Envs
 venv/
-ENV/
-env/
+.venv/
+
+# Streamlit cache
+.streamlit/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Local data & secrets
 .env
-*.sqlite3
-*.db
-chroma_store/
 uploads/
+chroma_store/
+*.log
