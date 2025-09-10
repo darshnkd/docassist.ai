@@ -9,3 +9,4 @@ env/
 *.sqlite3
 *.db
 chroma_store/
+uploads/
