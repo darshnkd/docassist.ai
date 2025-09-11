@@ -8,7 +8,7 @@ entry points (e.g., Flask app).
 
 import os
 import csv
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
@@ -73,6 +73,8 @@ def load_documents_from_path(file_path: str) -> List[Document]:
         return Docx2txtLoader(file_path).load()
     if ext == ".soap":
         return TextLoader(file_path, encoding="utf-8").load()
+    if ext == ".txt":
+        return TextLoader(file_path, encoding="utf-8").load()
     if ext == ".csv":
         lines = []
         with open(file_path, newline="", encoding="utf-8") as csvfile:
@@ -132,7 +134,7 @@ def create_graph(llm, tools):
         "You are a Medical Document Assistant. Answer questions strictly based on the ingested medical documents "
         "(PDF, DOCX, SOAP/txt, CSV). \n\n"
         "IMPORTANT: You MUST use the retriever_tool to search the medical documents before answering any questions. "
-        "If you cannot find the information using the retriever_tool, say \"I do not have sufficient information in the provided documents.\""
+        "If the answer is not found in the uploaded documents, say: \"This information is not available in the uploaded documents.\""
     )
 
     def should_continue(state: AgentState):
@@ -188,7 +190,7 @@ def create_graph(llm, tools):
 def answer_with_context(llm, query: str, context: str) -> str:
     qa_system_prompt = (
         "You are a medical RAG assistant. Answer ONLY using the provided CONTEXT. "
-        "If the answer is not present in the CONTEXT, say: 'I do not have sufficient information in the provided documents.' "
+        "If the answer is not present in the CONTEXT, say: 'This information is not available in the uploaded documents.' "
         "Respond concisely and extract explicit fields when present (e.g., Patient Name, Age, Disease)."
     )
     messages = [
@@ -208,37 +210,78 @@ class RagService:
     def __init__(self, persist_directory: Optional[str] = None):
         self.llm, self.embeddings, self.model_provider = initialize_models()
         self.persist_directory = persist_directory or os.path.join(PROJECT_ROOT, "chroma_store")
-        self.vectorstore = None
-        self.retriever = None
-        self.tools = None
-        self.agent = None
+        # Session scoped contexts keyed by conversation/session id
+        self._sessions: Dict[str, Dict[str, object]] = {}
 
-    def ingest_files(self, file_paths: List[str]):
+    def _get_session_ctx(self, session_id: str) -> Dict[str, object]:
+        if session_id not in self._sessions:
+            self._sessions[session_id] = {
+                "vectorstore": None,
+                "retriever": None,
+                "tools": None,
+                "agent": None,
+                "llm": self.llm,
+            }
+        return self._sessions[session_id]
+
+    def reset_session(self, session_id: str):
+        if session_id in self._sessions:
+            del self._sessions[session_id]
+
+    def ingest_files(self, session_id: str, file_paths: List[str]):
+        ctx = self._get_session_ctx(session_id)
         documents: List[Document] = []
         for path in file_paths:
             documents.extend(load_documents_from_path(path))
-        self.vectorstore = build_vectorstore(documents, self.embeddings, self.persist_directory)
-        self.retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-        self.tools = make_tools_from_retriever(self.retriever)
-        try:
-            self.llm = self.llm.bind_tools(self.tools)
-        except Exception:
-            pass
-        self.agent = create_graph(self.llm, self.tools)
 
-    def ask(self, conversation_messages: List[BaseMessage], user_input: str) -> str:
-        if not self.agent and self.retriever is None:
+        # Split now; reuse vectorstore if exists for incremental ingestion
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        pages_split = text_splitter.split_documents(documents)
+
+        collection_name = f"medical_documents_{session_id}"
+        if ctx["vectorstore"] is None:
+            ctx["vectorstore"] = Chroma.from_documents(
+                documents=pages_split,
+                embedding=self.embeddings,
+                persist_directory=self.persist_directory,
+                collection_name=collection_name,
+            )
+        else:
+            # Ensure correct collection instance
+            try:
+                ctx["vectorstore"].add_documents(pages_split)
+            except Exception:
+                ctx["vectorstore"] = Chroma.from_documents(
+                    documents=pages_split,
+                    embedding=self.embeddings,
+                    persist_directory=self.persist_directory,
+                    collection_name=collection_name,
+                )
+
+        ctx["retriever"] = ctx["vectorstore"].as_retriever(search_type="similarity", search_kwargs={"k": 5})
+        ctx["tools"] = make_tools_from_retriever(ctx["retriever"])
+        try:
+            ctx["llm"] = self.llm.bind_tools(ctx["tools"])  # bind per-session
+        except Exception:
+            ctx["llm"] = self.llm
+        ctx["agent"] = create_graph(ctx["llm"], ctx["tools"])
+
+    def ask(self, session_id: str, conversation_messages: List[BaseMessage], user_input: str) -> str:
+        ctx = self._get_session_ctx(session_id)
+        if ctx.get("agent") is None or ctx.get("retriever") is None:
             raise RuntimeError("No documents ingested. Please upload documents first.")
         messages = conversation_messages + [HumanMessage(content=user_input)]
-        result = self.agent.invoke({"messages": messages})
+        result = ctx["agent"].invoke({"messages": messages})
         # fallback deterministic answer using context to ensure grounded output
         try:
-            retrieved_context = self.tools[0].invoke(user_input)
+            retrieved_context = ctx["tools"][0].invoke(user_input)
         except Exception:
             retrieved_context = ""
         final_answer = result["messages"][-1].content
         if retrieved_context and "no relevant information" not in retrieved_context.lower():
-            final_answer = answer_with_context(self.llm, user_input, retrieved_context)
+            final_answer = answer_with_context(ctx["llm"], user_input, retrieved_context)
+        else:
+            final_answer = "This information is not available in the uploaded documents."
         return final_answer
 
 

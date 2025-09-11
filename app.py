@@ -63,7 +63,8 @@ def upload():
     if not saved_paths:
         return jsonify({"ok": False, "error": "No files uploaded"}), 400
     try:
-        rag_service.ingest_files(saved_paths)
+        session_id = get_conversation_key()
+        rag_service.ingest_files(session_id, saved_paths)
         return jsonify({"ok": True, "message": "Documents ingested successfully"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -84,7 +85,8 @@ def chat():
         else:
             lc_messages.append(AIMessage(content=m["content"]))
     try:
-        answer = rag_service.ask(lc_messages, user_text)
+        session_id = get_conversation_key()
+        answer = rag_service.ask(session_id, lc_messages, user_text)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -104,7 +106,13 @@ def chat():
 
 @app.route("/new_chat", methods=["POST"])
 def new_chat():
+    # reset conversation messages
     session.pop(get_conversation_key(), None)
+    # reset session-scoped vectorstore/agent
+    try:
+        rag_service.reset_session(get_conversation_key())
+    except Exception:
+        pass
     session["conversation_id"] = os.urandom(8).hex()
     session["session_finished"] = False
     return jsonify({"ok": True})
