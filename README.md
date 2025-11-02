@@ -54,43 +54,55 @@ While preserving:
 - User accounts
 - Login history
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 1. Clone the Repository
+```bash
+git clone https://github.com/darshnkd/docassist.ai.git
+cd docassist.ai
+```
+
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure API Keys
-Create a `.env` file in the project root:
+### 3. Configure Environment Variables
+Copy the example environment file and configure your API keys:
 ```bash
-# OpenAI API Key (Primary)
-OPENAI_API_KEY=your_openai_api_key_here
+cp .env.example .env
+```
 
-# Mistral API Key (Fallback) 
+Edit the `.env` file with your API keys:
+```bash
+# API Keys for DocAI
+OPENAI_API_KEY=your_openai_api_key_here
 MISTRAL_API_KEY=your_mistral_api_key_here
 
 # Flask Configuration
 FLASK_SECRET_KEY=your-secret-key-here
-PORT=5006
+PORT=5005
 
-# Database Configuration (Optional - defaults to SQLite)
+# Database Configuration
 DATABASE_URL=sqlite:///docassist.db
-# For PostgreSQL: postgresql://username:password@localhost/docassist
-# For MySQL: mysql://username:password@localhost/docassist
 ```
 
-**API Key Setup:**
+**🔑 API Key Setup:**
 - **OpenAI**: Get your key from [OpenAI Platform](https://platform.openai.com/api-keys)
 - **Mistral**: Get your key from [Mistral Console](https://console.mistral.ai/)
 
-### 3. Run the Application
+### 4. Run the Application
 ```bash
 python3 run.py
 ```
 
-### 4. Access the Application
-Open your browser and go to: `http://localhost:5006`
+The application will automatically:
+- Create the SQLite database if it doesn't exist
+- Set up all required tables
+- Create a default admin user
+
+### 5. Access the Application
+Open your browser and go to: `http://localhost:5005`
 
 **Default Admin Account:**
 - Username: `admin`
@@ -141,6 +153,73 @@ If no API keys are configured, the system runs in demo mode with helpful instruc
 
 - Python 3.8+
 - See `requirements.txt` for all dependencies
+
+## 🔄 Development Workflow
+
+For contributors and team members, follow this professional workflow:
+
+### Setting up Development Environment
+```bash
+# 1. Ensure you're on main and pull latest changes
+git checkout main
+git pull origin main
+
+# 2. Create a feature branch
+git checkout -b feature/your-feature-name
+
+# 3. Make your changes and test locally
+
+# 4. Commit and push your changes
+git add .
+git commit -m "Add: your feature description"
+git push -u origin feature/your-feature-name
+
+# 5. Create a Pull Request on GitHub
+# 6. After review and approval, merge into main
+```
+
+### Branch Naming Convention
+- `feature/feature-name` - New features
+- `bugfix/issue-description` - Bug fixes
+- `hotfix/critical-fix` - Critical production fixes
+- `docs/documentation-update` - Documentation updates
+
+## 📸 Screenshots
+
+### Login Interface
+*Coming soon - Login page with user registration*
+
+### Document Upload
+*Coming soon - Drag and drop document upload interface*
+
+### Chat Interface
+*Coming soon - AI-powered chat with document analysis*
+
+### User Dashboard
+*Coming soon - User management and document history*
+
+## 🔐 Security Features
+
+- **Environment Variables**: All sensitive data stored in `.env` files (not committed to git)
+- **Password Hashing**: Secure password storage using Werkzeug
+- **Session Management**: Secure Flask sessions with configurable secret keys
+- **Input Validation**: Email validation and secure file uploads
+- **SQL Injection Protection**: SQLAlchemy ORM with parameterized queries
+- **Login Tracking**: Comprehensive audit trail of all login attempts
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📞 Support
+
+For support and questions:
+- Create an issue on GitHub
+- Contact the development team
 
 ## License
 
