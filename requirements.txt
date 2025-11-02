@@ -16,3 +16,7 @@ mistralai
 pandas
 Flask
 Werkzeug
+Flask-SQLAlchemy
+Flask-Migrate
+bcrypt
+email-validator
